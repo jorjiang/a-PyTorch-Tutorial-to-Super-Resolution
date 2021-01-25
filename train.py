@@ -241,8 +241,8 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
         # Because, if we used that, we'd be back-propagating (finding gradients) over the G too when backward() is called
         # It's actually faster to detach the SR images from the G and forward-prop again, than to back-prop. over the G unnecessarily
         # See FAQ section in the tutorial
-        fn_d.update((batch_size - hr_discriminated.sum().item())/batch_size, batch_size)
-        fp_d.update((sr_discriminated.sum().item())/batch_size, batch_size)
+        fn_d.update(((hr_discriminated <= 0).sum().item())/batch_size, batch_size)
+        fp_d.update(((sr_discriminated >= 0).sum().item())/batch_size, batch_size)
         # Binary Cross-Entropy loss
         adversarial_loss = adversarial_loss_criterion(sr_discriminated, 0.2 * torch.rand_like(sr_discriminated)) + \
                            adversarial_loss_criterion(hr_discriminated, 0.2 * torch.rand_like(hr_discriminated) + 0.8)
