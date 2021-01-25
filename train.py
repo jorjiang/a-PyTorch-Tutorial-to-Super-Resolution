@@ -185,6 +185,9 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
     losses_c = AverageMeter()  # content loss
     losses_a = AverageMeter()  # adversarial loss in the generator
     losses_d = AverageMeter()  # adversarial loss in the discriminator
+    fp_d = AverageMeter()
+    fn_d = AverageMeter()
+
 
     start = time.time()
 
@@ -238,7 +241,8 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
         # Because, if we used that, we'd be back-propagating (finding gradients) over the G too when backward() is called
         # It's actually faster to detach the SR images from the G and forward-prop again, than to back-prop. over the G unnecessarily
         # See FAQ section in the tutorial
-
+        fn_d.update((batch_size - hr_discriminated.sum().item())/batch_size, batch_size)
+        fp_d.update((sr_discriminated.sum().item())/batch_size, batch_size)
         # Binary Cross-Entropy loss
         adversarial_loss = adversarial_loss_criterion(sr_discriminated, 0.2 * torch.rand_like(sr_discriminated)) + \
                            adversarial_loss_criterion(hr_discriminated, 0.2 * torch.rand_like(hr_discriminated) + 0.8)
@@ -270,16 +274,21 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
                   'Data Time {data_time.val:.3f} ({data_time.avg:.3f})----'
                   'Cont. Loss {loss_c.val:.4f} ({loss_c.avg:.4f})----'
                   'Adv. Loss {loss_a.val:.4f} ({loss_a.avg:.4f})----'
-                  'Disc. Loss {loss_d.val:.4f} ({loss_d.avg:.4f})'.format(epoch,
+                  'Disc. Loss {loss_d.val:.4f} ({loss_d.avg:.4f})----'
+                  'fp: {fp_d.val:.4f} ({fp_d.avg:.4f})----'
+                  'fn: {fn_d.val:.4f} ({fn_d.avg:.4f})----'.format(epoch,
                                                                           i,
                                                                           len(train_loader),
                                                                           batch_time=batch_time,
                                                                           data_time=data_time,
                                                                           loss_c=losses_c,
                                                                           loss_a=losses_a,
-                                                                          loss_d=losses_d))
+                                                                          loss_d=losses_d,
+                                                                          fp_d=fp_d,
+                                                                          fn_d=fn_d
+                                                                    ))
 
-            this_log = (epoch, i, batch_time, data_time, losses_c, losses_a, losses_d)
+            this_log = (epoch, i, batch_time, data_time, losses_c, losses_a, losses_d, fp_d, fn_d)
             if os.path.isfile(log_file):
                 with open(log_file, 'rb') as f:
                     log_data = pickle.load(f)
