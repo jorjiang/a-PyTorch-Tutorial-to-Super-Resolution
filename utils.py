@@ -299,3 +299,10 @@ def tensor_to_np(x):
 def get_all_img_files(img_dir: str):
     img_type = {'png', 'jpg', 'jpeg'}
     return sum([glob('{}/*{}'.format(img_dir, t)) for t in img_type], [])
+
+def expand_contrast(img: IMG) -> Img:
+    img_array = np.array(img)
+    min_pix, max_pix = img_array.min(), img_array.max()
+    pix_range = max_pix - min_pix
+    expanded_img_array = (img_array.astype(float) * 255 / pix_range).astype('uint8') - min_pix
+    return Image.fromarray(expanded_img_array)

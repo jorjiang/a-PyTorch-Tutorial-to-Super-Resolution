@@ -240,8 +240,8 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
         # See FAQ section in the tutorial
 
         # Binary Cross-Entropy loss
-        adversarial_loss = adversarial_loss_criterion(sr_discriminated, 0.1 * torch.rand_like(sr_discriminated)) + \
-                           adversarial_loss_criterion(hr_discriminated, 0.1 * torch.rand_like(hr_discriminated) + 0.9)
+        adversarial_loss = adversarial_loss_criterion(sr_discriminated, 0.2 * torch.rand_like(sr_discriminated)) + \
+                           adversarial_loss_criterion(hr_discriminated, 0.2 * torch.rand_like(hr_discriminated) + 0.8)
 
         # Back-prop.
         optimizer_d.zero_grad()
@@ -311,7 +311,7 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
                 generator.to("cpu")
                 with torch.no_grad():
                     output = generator(transform(img)[1].unsqueeze(0))
-                    comb_imgs[i * 2 + 1] = tensor_to_img(output)
+                    comb_imgs[i * 2 + 1] = expand_contrast(tensor_to_img(output))
             generator.to("cuda")
             combi_img = combine_image_horizontally(comb_imgs)
             save_img(combi_img, file_name)
