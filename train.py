@@ -306,6 +306,8 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
             losses_c.reset()
             losses_a.reset()
             losses_c.reset()
+            fp_d.reset()
+            fn_d.reset()
 
         if i % test_freq == 0 and epoch % 3 == 0:
             print('create test img')
