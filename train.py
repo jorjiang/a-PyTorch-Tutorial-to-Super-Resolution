@@ -108,8 +108,8 @@ def main():
                               split='train',
                               crop_size=crop_size,
                               scaling_factor=scaling_factor,
-                              lr_img_type='imagenet-norm',
-                              hr_img_type='imagenet-norm')
+                              lr_img_type='[-1, 1]',
+                              hr_img_type='[-1, 1]')
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=workers,
                                                pin_memory=True)
 
@@ -316,8 +316,8 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
             transform = ImageTransforms(split='test',
                                         crop_size=0,
                                         scaling_factor=4,
-                                        lr_img_type='imagenet-norm',
-                                        hr_img_type='imagenet-norm')
+                                        lr_img_type='[-1, 1]',
+                                        hr_img_type='[-1, 1]')
             for i, img in enumerate(comb_imgs[::2]):
                 generator.to("cpu")
                 with torch.no_grad():
