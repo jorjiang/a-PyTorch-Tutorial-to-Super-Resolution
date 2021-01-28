@@ -8,7 +8,7 @@ import numpy as np
 import scipy.stats as stats
 import torch
 import torchvision.transforms.functional as FT
-from PIL import Image
+from PIL import Image, ImageFilter
 from torchvision import transforms
 
 from processing.add_noise.degrade_funcs import jpeg_blur
@@ -137,9 +137,7 @@ class ImageTransforms(object):
                                    Image.BILINEAR, Image.HAMMING,
                                    Image.BICUBIC, Image.LANCZOS]
         self.downsample_proba = [0.1, 0.1, 0.2, 0.1, 0.3, 0.2]
-        jpeg_mean, jpeg_std = 50, 25
-
-        self.jpeg_quality_dist = self._jpeg_quality_dist(mean=50, std=25, lower=1, upper=100)
+        self.jpeg_quality_dist = bounded_norm_dist(mean=50, std=25, lower=1, upper=100)
         # weights = scipy.io.loadmat(path.join('./processing/jpeg_artifacts/weights/q{}.mat'.format(40)))
         # self.denoiser = ARCNN(weights).to("cpu").eval()
         assert self.split in {'train', 'test'}
@@ -164,7 +162,8 @@ class ImageTransforms(object):
             super_crop = False
             if random.random() > 0.25:
                 super_crop = True
-                real_crop_size = int((random.random() + 1) * self.crop_size)
+                crop_expansion_r = bounded_norm_dist(1.5, 0.75, 1, 3).rvs()
+                real_crop_size = int(crop_expansion_r * self.crop_size)
             else:
                 real_crop_size = self.crop_size
             left = random.randint(1, img.width - real_crop_size)
@@ -193,6 +192,8 @@ class ImageTransforms(object):
         if random.random() > 0.25:
             quality = self.jpeg_quality_dist.rvs()
             lr_img = jpeg_blur(img=lr_img, q=quality)
+        if random.random() > 0.75:
+            lr_img = blur(img)
 
         # Sanity check
         assert hr_img.width == lr_img.width * self.scaling_factor
@@ -202,9 +203,6 @@ class ImageTransforms(object):
         lr_img = convert_image(lr_img, source='pil', target=self.lr_img_type)
         hr_img = convert_image(hr_img, source='pil', target=self.hr_img_type)
         return lr_img, hr_img
-
-    def _jpeg_quality_dist(self, mean: float, std: float, lower: float, upper: float):
-        return stats.truncnorm((lower - mean) / std, (upper - mean) / std, loc=mean, scale=std)
 
 
 class AverageMeter(object):
@@ -300,9 +298,30 @@ def get_all_img_files(img_dir: str):
     img_type = {'png', 'jpg', 'jpeg'}
     return sum([glob('{}/*{}'.format(img_dir, t)) for t in img_type], [])
 
+
 def expand_contrast(img: IMG) -> IMG:
     img_array = np.array(img)
     min_pix, max_pix = img_array.min(), img_array.max()
     pix_range = max_pix - min_pix
     expanded_img_array = ((img_array - min_pix).astype(float) * 255 / pix_range).astype('uint8')
     return Image.fromarray(expanded_img_array)
+
+
+def bounded_norm_dist(mean: float, std: float, lower: float, upper: float):
+    return stats.truncnorm((lower - mean) / std, (upper - mean) / std, loc=mean, scale=std)
+
+def blur(img: IMG) -> IMG:
+    blur_type = random.choice(['gaussian', 'box', 'resize'])
+    if blur_type == 'gaussian':
+        radius = bounded_norm_dist(1.5, 0.75, 1, 2.5).rvs()
+        return img.filter(ImageFilter.GaussianBlur(radius))
+    elif blur_type == "box":
+        radius = bounded_norm_dist(1.5, 0.75, 1, 2.5).rvs()
+        return img.filter(ImageFilter.GaussianBlur(radius))
+    else:
+        r = bounded_norm_dist(2, 0.75, 1, 3.5).rvs()
+        down_resize_type = random.choice(list(range(0, 6)))
+        up_resize_type = random.choice(list(range(0, 6)))
+        w, h = img.size
+        return img.resize((int(w / r), int(h / r)),
+                          down_resize_type).resize((w, h), up_resize_type)
