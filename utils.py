@@ -192,12 +192,12 @@ class ImageTransforms(object):
         if random.random() > 0.25:
             quality = self.jpeg_quality_dist.rvs()
             lr_img = jpeg_blur(img=lr_img, q=quality)
-        if random.random() > 0.75:
-            lr_img = blur(img)
+        if random.random() > 0.25:
+            lr_img = blur(lr_img)
 
         # Sanity check
-        assert hr_img.width == lr_img.width * self.scaling_factor
-        assert hr_img.height == lr_img.height * self.scaling_factor
+        assert hr_img.width == lr_img.width * self.scaling_factor, "h:{} l:{}".format(hr_img.width, lr_img.width)
+        assert hr_img.height == lr_img.height * self.scaling_factor, "h:{} l:{}".format(hr_img.height, lr_img.height)
 
         # Convert the LR and HR image to the required type
         lr_img = convert_image(lr_img, source='pil', target=self.lr_img_type)
