@@ -310,22 +310,24 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
             fn_d.reset()
 
         if i % test_freq == 0 and epoch % 3 == 0:
-            print('create test img')
-            now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-            file_name = 'test_output/{}_{}_{}.png'.format(str(epoch).zfill(4), str(i).zfill(6), now)
-            transform = ImageTransforms(split='test',
-                                        crop_size=0,
-                                        scaling_factor=4,
-                                        lr_img_type='[-1, 1]',
-                                        hr_img_type='[-1, 1]')
-            for i, img in enumerate(comb_imgs[::2]):
-                generator.to("cpu")
-                with torch.no_grad():
-                    output = generator(transform(img)[1].unsqueeze(0))
-                    comb_imgs[i * 2 + 1] = expand_contrast(tensor_to_img(output))
-            generator.to("cuda")
-            combi_img = combine_image_horizontally(comb_imgs)
-            save_img(combi_img, file_name)
+            try:
+                print('create test img')
+                now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+                file_name = 'test_output/{}_{}_{}.png'.format(str(epoch).zfill(4), str(i).zfill(6), now)
+                transform = ImageTransforms(split='test',
+                                            crop_size=0,
+                                            scaling_factor=4,
+                                            lr_img_type='[-1, 1]',
+                                            hr_img_type='[-1, 1]')
+                for i, img in enumerate(comb_imgs[::2]):
+                    with torch.no_grad():
+                        output = generator(transform(img)[1].unsqueeze(0).to(device))
+                        comb_imgs[i * 2 + 1] = expand_contrast(tensor_to_img(output.to("cpu")))
+                combi_img = combine_image_horizontally(comb_imgs)
+                save_img(combi_img, file_name)
+            except Exception as e:
+                print(e)
+
 
     del lr_imgs, hr_imgs, sr_imgs, hr_imgs_in_vgg_space, sr_imgs_in_vgg_space, hr_discriminated, sr_discriminated  # free some memory since their histories may be stored
 
