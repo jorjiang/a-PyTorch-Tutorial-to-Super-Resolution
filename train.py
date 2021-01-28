@@ -135,7 +135,7 @@ def main():
               optimizer_d=optimizer_d,
               epoch=epoch)
 
-        if (epoch % 20 == 0) and (epoch != 0):
+        if ((epoch % 20 == 0) and (epoch != 0)) or (epoch in {0, 1, 2}):
             now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
             ckp_file = storage + '/ckp/{}_{}.pth.tar'.format(str(epoch).zfill(4), now)
             print('save ckp')
@@ -146,8 +146,8 @@ def main():
                         'optimizer_d': optimizer_d},
                        ckp_file
                        )
-            generator.to('cuda')
-            discriminator.to('cuda')
+            # generator.to('cuda')
+            # discriminator.to('cuda')
         # if "1915" > datetime.now().strftime("%H%M") > "0600":
         #     exit()
 
