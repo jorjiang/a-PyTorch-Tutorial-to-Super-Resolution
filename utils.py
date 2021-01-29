@@ -39,9 +39,9 @@ def create_data_lists(train_folders, test_folders, min_size, output_folder):
         for i in os.listdir(d):
             if i.endswith('.png') or i.endswith('.jpg') or i.endswith('jpeg'):
                 img_path = os.path.join(d, i)
-                img = Image.open(img_path, mode='r')
-                if img.width >= min_size and img.height >= min_size:
-                    train_images.append(img_path)
+                # img = Image.open(img_path, mode='r')
+                # if img.width >= min_size and img.height >= min_size:
+                train_images.append(img_path)
     print("There are %d images in the training data.\n" % len(train_images))
     with open(os.path.join(output_folder, 'train_images.json'), 'w') as j:
         json.dump(train_images, j)
@@ -52,9 +52,9 @@ def create_data_lists(train_folders, test_folders, min_size, output_folder):
         for i in os.listdir(d):
             if i.endswith('.png') or i.endswith('.jpg') or i.endswith('jpeg'):
                 img_path = os.path.join(d, i)
-                img = Image.open(img_path, mode='r')
-                if img.width >= min_size and img.height >= min_size:
-                    test_images.append(img_path)
+                # img = Image.open(img_path, mode='r')
+                # if img.width >= min_size and img.height >= min_size:
+                test_images.append(img_path)
         print("There are %d images in the %s test data.\n" % (len(test_images), test_name))
         with open(os.path.join(output_folder, test_name + '_test_images.json'), 'w') as j:
             json.dump(test_images, j)
@@ -192,8 +192,8 @@ class ImageTransforms(object):
         if random.random() > 0.25:
             quality = self.jpeg_quality_dist.rvs()
             lr_img = jpeg_blur(img=lr_img, q=quality)
-        if random.random() > 0.25:
-            lr_img = blur(lr_img)
+        # if random.random() > 0.15:
+        #     lr_img = blur(lr_img)
 
         # Sanity check
         assert hr_img.width == lr_img.width * self.scaling_factor, "h:{} l:{}".format(hr_img.width, lr_img.width)
@@ -313,13 +313,13 @@ def bounded_norm_dist(mean: float, std: float, lower: float, upper: float):
 def blur(img: IMG) -> IMG:
     blur_type = random.choice(['gaussian', 'box', 'resize'])
     if blur_type == 'gaussian':
-        radius = bounded_norm_dist(1.5, 0.75, 1, 2.5).rvs()
+        radius = bounded_norm_dist(1, 0.5, 0.5, 1.5).rvs()
         return img.filter(ImageFilter.GaussianBlur(radius))
     elif blur_type == "box":
-        radius = bounded_norm_dist(1.5, 0.75, 1, 2.5).rvs()
+        radius = bounded_norm_dist(1, 0.5, 0.5, 1.5).rvs()
         return img.filter(ImageFilter.GaussianBlur(radius))
     else:
-        r = bounded_norm_dist(2, 0.75, 1, 3.5).rvs()
+        r =  bounded_norm_dist(1.5, 0.35, 1, 2).rvs()
         down_resize_type = random.choice(list(range(0, 6)))
         up_resize_type = random.choice(list(range(0, 6)))
         w, h = img.size
