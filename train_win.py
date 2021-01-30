@@ -322,10 +322,10 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
                                             scaling_factor=4,
                                             lr_img_type='imagenet-norm',
                                             hr_img_type='imagenet-norm')
-                for i, img in enumerate(comb_imgs[::2]):
+                for k, img in enumerate(comb_imgs[::2]):
                     with torch.no_grad():
                         output = generator(transform(img)[1].unsqueeze(0).to(device))
-                        comb_imgs[i * 2 + 1] = reconstruct_y_tensor_to_rgb_pil_img(img=img, y_t=output[0][0])
+                        comb_imgs[k * 2 + 1] = reconstruct_y_tensor_to_rgb_pil_img(img=img, y_t=output[0][0])
                 combi_img = combine_image_horizontally(comb_imgs)
                 save_img(combi_img, file_name)
                 if i % (test_freq * 3) == 0:
