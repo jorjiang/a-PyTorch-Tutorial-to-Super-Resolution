@@ -3,12 +3,14 @@ import os
 import random
 from glob import glob
 from typing import List
-
+import traceback
+import cv2
 import numpy as np
 import scipy.stats as stats
 import torch
 import torchvision.transforms.functional as FT
 from PIL import Image, ImageFilter
+from kornia import rgb_to_ycbcr
 from torchvision import transforms
 
 from processing.add_noise.degrade_funcs import jpeg_blur
@@ -22,6 +24,8 @@ imagenet_mean = torch.FloatTensor([0.485, 0.456, 0.406]).unsqueeze(1).unsqueeze(
 imagenet_std = torch.FloatTensor([0.229, 0.224, 0.225]).unsqueeze(1).unsqueeze(2)
 imagenet_mean_cuda = torch.FloatTensor([0.485, 0.456, 0.406]).to(device).unsqueeze(0).unsqueeze(2).unsqueeze(3)
 imagenet_std_cuda = torch.FloatTensor([0.229, 0.224, 0.225]).to(device).unsqueeze(0).unsqueeze(2).unsqueeze(3)
+imagenet_g_mean = 0.456
+imagenet_g_std = 0.224
 
 
 def create_data_lists(train_folders, test_folders, min_size, output_folder):
@@ -101,10 +105,16 @@ def convert_image(img, source, target):
         img = 2. * img - 1.
 
     elif target == 'imagenet-norm':
-        if img.ndimension() == 3:
-            img = (img - imagenet_mean) / imagenet_std
-        elif img.ndimension() == 4:
-            img = (img - imagenet_mean_cuda) / imagenet_std_cuda
+        if source == '[-1, 1]':
+            assert img.shape[1] == 1
+            img = (img - imagenet_g_mean) / imagenet_g_std
+        else:
+
+            if img.ndimension() == 3:
+                img = (img - imagenet_mean) / imagenet_std
+            elif img.ndimension() == 4:
+                img = (img - imagenet_mean_cuda) / imagenet_std_cuda
+
 
     elif target == 'y-channel':
         # Based on definitions at https://github.com/xinntao/BasicSR/wiki/Color-conversion-in-SR
@@ -174,6 +184,16 @@ class ImageTransforms(object):
             if super_crop:
                 hr_img = hr_img.resize((self.crop_size, self.crop_size))
             hr_img = self.augmenter(hr_img)
+            # Downsize this crop to obtain a low-resolution version of it
+            resize_method = np.random.choice(self.downsample_methods, p=self.downsample_proba)
+            new_w, new_h = int(hr_img.width / self.scaling_factor), int(hr_img.height / self.scaling_factor)
+            lr_img = hr_img.resize((new_w, new_h), resize_method)
+            # Add Jpeg artifacts to lr_img
+            if random.random() > 0.25:
+                quality = self.jpeg_quality_dist.rvs()
+                lr_img = jpeg_blur(img=lr_img, q=quality)
+            # if random.random() > 0.15:
+            #     lr_img = blur(lr_img)
         else:
             # Take the largest possible center-crop of it such that its dimensions are perfectly divisible by the scaling factor
             x_remainder = img.width % self.scaling_factor
@@ -183,25 +203,19 @@ class ImageTransforms(object):
             right = left + (img.width - x_remainder)
             bottom = top + (img.height - y_remainder)
             hr_img = img.crop((left, top, right, bottom))
+            lr_img = None
 
-        # Downsize this crop to obtain a low-resolution version of it
-        resize_method = np.random.choice(self.downsample_methods, p=self.downsample_proba)
-        new_w, new_h = int(hr_img.width / self.scaling_factor), int(hr_img.height / self.scaling_factor)
-        lr_img = hr_img.resize((new_w, new_h), resize_method)
-        # Add Jpeg artifacts to lr_img
-        if random.random() > 0.25:
-            quality = self.jpeg_quality_dist.rvs()
-            lr_img = jpeg_blur(img=lr_img, q=quality)
-        # if random.random() > 0.15:
-        #     lr_img = blur(lr_img)
-
-        # Sanity check
-        assert hr_img.width == lr_img.width * self.scaling_factor, "h:{} l:{}".format(hr_img.width, lr_img.width)
-        assert hr_img.height == lr_img.height * self.scaling_factor, "h:{} l:{}".format(hr_img.height, lr_img.height)
-
-        # Convert the LR and HR image to the required type
-        lr_img = convert_image(lr_img, source='pil', target=self.lr_img_type)
+        if lr_img is not None:
+            # Sanity check
+            assert self.split == "train"
+            assert hr_img.width == lr_img.width * self.scaling_factor, "h:{} l:{}".format(hr_img.width, lr_img.width)
+            assert hr_img.height == lr_img.height * self.scaling_factor, "h:{} l:{}".format(hr_img.height,
+                                                                                            lr_img.height)
+            lr_img = convert_image(lr_img, source='pil', target=self.lr_img_type)
+            lr_img = rgb_to_ycbcr(lr_img)[0, :, :].unsqueeze(0)
         hr_img = convert_image(hr_img, source='pil', target=self.hr_img_type)
+        hr_img = rgb_to_ycbcr(hr_img)[0, :, :].unsqueeze(0)
+        # Convert the LR and HR image to the required type
         return lr_img, hr_img
 
 
@@ -310,6 +324,7 @@ def expand_contrast(img: IMG) -> IMG:
 def bounded_norm_dist(mean: float, std: float, lower: float, upper: float):
     return stats.truncnorm((lower - mean) / std, (upper - mean) / std, loc=mean, scale=std)
 
+
 def blur(img: IMG) -> IMG:
     blur_type = random.choice(['gaussian', 'box', 'resize'])
     if blur_type == 'gaussian':
@@ -319,9 +334,30 @@ def blur(img: IMG) -> IMG:
         radius = bounded_norm_dist(1, 0.5, 0.5, 1.5).rvs()
         return img.filter(ImageFilter.GaussianBlur(radius))
     else:
-        r =  bounded_norm_dist(1.5, 0.35, 1, 2).rvs()
+        r = bounded_norm_dist(1.5, 0.35, 1, 2).rvs()
         down_resize_type = random.choice(list(range(0, 6)))
         up_resize_type = random.choice(list(range(0, 6)))
         w, h = img.size
         return img.resize((int(w / r), int(h / r)),
                           down_resize_type).resize((w, h), up_resize_type)
+
+def reconstruct_y_tensor_to_rgb_pil_img(img: IMG, y_t: torch.Tensor) -> IMG:
+    img_array = np.array(img)
+    ycc_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2YCR_CB)
+    y_array = y_t.to('cpu').numpy()
+    r_array = ycc_array[:,:,1]
+    b_array = ycc_array[:,:,2]
+    r_array = cv2.resize(r_array, y_t.shape[::-1])
+    b_array = cv2.resize(b_array, y_t.shape[::-1])
+    full_ycc_array = np.dstack([y_array, r_array, b_array])
+    rgb_array = cv2.cvtColor(full_ycc_array, cv2.COLOR_YCR_CB2RGB)
+    norm_rgb_array = norm_img_array(rgb_array)
+    return Image.fromarray(norm_rgb_array)
+
+def norm_img_array(img_array: np.ndarray) -> np.ndarray:
+    min_v = img_array.min()
+    max_v = img_array.max()
+    v_range = max_v - min_v
+    img_array = img_array.astype(float)
+    img_array = img_array - min_v * 255 / v_range
+    return np.round(img_array).astype('uint8')

@@ -28,9 +28,9 @@ n_blocks_d = 8  # number of convolutional blocks
 fc_size_d = 1024  # size of the first fully connected layer
 
 # Learning parameter
-ckp_dir = storage + '/ckp/'
-checkpoint = ckp_dir + '0006_2021_01_29_12_01_44.pth.tar'  # path to model (SRGAN) checkpoint, None if none
-# checkpoint = None
+ckp_dir = storage + '/output/'
+# checkpoint = ckp_dir + '0006_2021_01_29_12_01_44.pth.tar'  # path to model (SRGAN) checkpoint, None if none
+checkpoint = None
 batch_size = 51 # batch size
 start_epoch = 0  # start at this epoch
 iterations = 2e5  # number of training iterations
@@ -63,7 +63,7 @@ def main():
                               scaling_factor=scaling_factor)
 
         # Initialize generator network with pretrained SRResNet
-        generator.initialize_with_srresnet(srresnet_checkpoint=srresnet_checkpoint)
+        # generator.initialize_with_srresnet(srresnet_checkpoint=srresnet_checkpoint)
 
         # Initialize generator's optimizer
         optimizer_g = torch.optim.Adam(params=filter(lambda p: p.requires_grad, generator.parameters()),
@@ -204,7 +204,6 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
         # Generate
         sr_imgs = generator(lr_imgs)  # (N, 3, 96, 96), in [-1, 1]
         sr_imgs = convert_image(sr_imgs, source='[-1, 1]', target='imagenet-norm')  # (N, 3, 96, 96), imagenet-normed
-
         # Calculate VGG feature maps for the super-resolved (SR) and high resolution (HR) images
         sr_imgs_in_vgg_space = truncated_vgg19(sr_imgs)
         hr_imgs_in_vgg_space = truncated_vgg19(hr_imgs).detach()  # detached because they're constant, targets
@@ -311,6 +310,8 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
 
         if i % test_freq == 0:
             try:
+                other_image = random.choice(get_all_img_files('test_images'))
+                comb_imgs[-2] = Image.open(other_image, 'r')
                 print('create test img')
                 now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
                 out_dir = storage + '/output/'
@@ -324,21 +325,22 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
                 for i, img in enumerate(comb_imgs[::2]):
                     with torch.no_grad():
                         output = generator(transform(img)[1].unsqueeze(0).to(device))
-                        comb_imgs[i * 2 + 1] = expand_contrast(tensor_to_img(output.to("cpu")))
+                        comb_imgs[i * 2 + 1] = reconstruct_y_tensor_to_rgb_pil_img(img=img, y_t=output[0][0])
                 combi_img = combine_image_horizontally(comb_imgs)
                 save_img(combi_img, file_name)
-                now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-                ckp_file = storage + '/ckp/{}_{}.pth.tar'.format(str(epoch).zfill(4), now)
-                print('save ckp')
-                torch.save({'epoch': epoch,
-                            'generator': generator,
-                            'discriminator': discriminator,
-                            'optimizer_g': optimizer_g,
-                            'optimizer_d': optimizer_d},
-                           ckp_file
-                           )
-            except Exception as e:
-                print(e)
+                if i % (test_freq * 3) == 0:
+                    now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+                    ckp_file = '{}/{}_{}.pth.tar'.format(ckp_dir, str(epoch).zfill(4), now)
+                    print('save ckp')
+                    torch.save({'epoch': epoch,
+                                'generator': generator,
+                                'discriminator': discriminator,
+                                'optimizer_g': optimizer_g,
+                                'optimizer_d': optimizer_d},
+                               ckp_file
+                               )
+            except Exception:
+                print(traceback.format_exc())
 
 
     del lr_imgs, hr_imgs, sr_imgs, hr_imgs_in_vgg_space, sr_imgs_in_vgg_space, hr_discriminated, sr_discriminated  # free some memory since their histories may be stored

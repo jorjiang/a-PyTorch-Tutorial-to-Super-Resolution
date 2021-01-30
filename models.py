@@ -1,7 +1,8 @@
-import torch
-from torch import nn
-import torchvision
 import math
+import torch
+import torchvision
+from kornia import ycbcr_to_rgb
+from torch import nn
 
 
 class ConvolutionalBlock(nn.Module):
@@ -148,7 +149,7 @@ class SRResNet(nn.Module):
         assert scaling_factor in {2, 4, 8}, "The scaling factor must be 2, 4, or 8!"
 
         # The first convolutional block
-        self.conv_block1 = ConvolutionalBlock(in_channels=3, out_channels=n_channels, kernel_size=large_kernel_size,
+        self.conv_block1 = ConvolutionalBlock(in_channels=1, out_channels=n_channels, kernel_size=large_kernel_size,
                                               batch_norm=False, activation='PReLu')
 
         # A sequence of n_blocks residual blocks, each containing a skip-connection across the block
@@ -167,7 +168,7 @@ class SRResNet(nn.Module):
               in range(n_subpixel_convolution_blocks)])
 
         # The last convolutional block
-        self.conv_block3 = ConvolutionalBlock(in_channels=n_channels, out_channels=3, kernel_size=large_kernel_size,
+        self.conv_block3 = ConvolutionalBlock(in_channels=n_channels, out_channels=1, kernel_size=large_kernel_size,
                                               batch_norm=False, activation='Tanh')
 
     def forward(self, lr_imgs):
@@ -244,7 +245,7 @@ class Discriminator(nn.Module):
         """
         super(Discriminator, self).__init__()
 
-        in_channels = 3
+        in_channels = 1
 
         # A series of convolutional blocks
         # The first, third, fifth (and so on) convolutional blocks increase the number of channels but retain image size
@@ -252,10 +253,10 @@ class Discriminator(nn.Module):
         # The first convolutional block is unique because it does not employ batch normalization
         conv_blocks = list()
         for i in range(n_blocks):
-            out_channels = (n_channels if i is 0 else in_channels * 2) if i % 2 is 0 else in_channels
+            out_channels = (n_channels if i == 0 else in_channels * 2) if i % 2 == 0 else in_channels
             conv_blocks.append(
                 ConvolutionalBlock(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
-                                   stride=1 if i % 2 is 0 else 2, batch_norm=i is not 0, activation='LeakyReLu'))
+                                   stride=1 if i % 2 == 0 else 2, batch_norm=i == 0, activation='LeakyReLu'))
             in_channels = out_channels
         self.conv_blocks = nn.Sequential(*conv_blocks)
 
@@ -336,7 +337,11 @@ class TruncatedVGG19(nn.Module):
         Forward propagation
         :param input: high-resolution or super-resolution images, a tensor of size (N, 3, w * scaling factor, h * scaling factor)
         :return: the specified VGG19 feature map, a tensor of size (N, feature_map_channels, feature_map_w, feature_map_h)
+
+        # added by josh: the input should be a image-net normalized 1 channel tensor(coming from Y channel)
         """
-        output = self.truncated_vgg19(input)  # (N, feature_map_channels, feature_map_w, feature_map_h)
+        full_ycc = torch.cat([input, torch.zeros_like(input), torch.zeros_like(input)], dim=1)
+        y_channel_rgb = ycbcr_to_rgb(full_ycc)
+        output = self.truncated_vgg19(y_channel_rgb)  # (N, feature_map_channels, feature_map_w, feature_map_h)
 
         return output
