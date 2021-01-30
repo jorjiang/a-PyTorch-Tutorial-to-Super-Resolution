@@ -28,8 +28,8 @@ n_blocks_d = 8  # number of convolutional blocks
 fc_size_d = 1024  # size of the first fully connected layer
 
 # Learning parameter
-ckp_dir = storage + '/ckp/'
-checkpoint = ckp_dir + '0006_2021_01_29_12_01_44.pth.tar'  # path to model (SRGAN) checkpoint, None if none
+ckp_dir = storage + '/output/'
+checkpoint = ckp_dir + '0000_2021_01_30_10_48_49.pth.tar'  # path to model (SRGAN) checkpoint, None if none
 # checkpoint = None
 batch_size = 51 # batch size
 start_epoch = 0  # start at this epoch
@@ -328,7 +328,7 @@ def train(train_loader, generator, discriminator, truncated_vgg19, content_loss_
                 combi_img = combine_image_horizontally(comb_imgs)
                 save_img(combi_img, file_name)
                 now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-                ckp_file = storage + '/ckp/{}_{}.pth.tar'.format(str(epoch).zfill(4), now)
+                ckp_file = ckp_dir + '/{}_{}.pth.tar'.format(str(epoch).zfill(4), now)
                 print('save ckp')
                 torch.save({'epoch': epoch,
                             'generator': generator,
